@@ -27,21 +27,22 @@ public:
     void FindBlock(CScheduler& s, int blockNumber) {
         // Create a new copy of best chain:
         best_chain.push_back(blockNumber);
+        auto chain_copy = std::make_shared<std::vector<int> >(best_chain.begin(), best_chain.end());
         
-        RelayChain(s);
+        RelayChain(s, chain_copy);
     }
 
-    void ConsiderChain(CScheduler& s, std::vector<int> chain) {
-        if (chain.size() > best_chain.size()) {
-            best_chain = chain;
-            RelayChain(s);
+    void ConsiderChain(CScheduler& s, std::shared_ptr<std::vector<int> > chain) {
+        if (chain->size() > best_chain.size()) {
+            best_chain = *chain;
+            RelayChain(s, chain);
         }
     }
 
-    void RelayChain(CScheduler& s) {
+    void RelayChain(CScheduler& s, std::shared_ptr<std::vector<int> > chain) {
         auto now = boost::chrono::system_clock::now();
         for (auto i : peers) {
-            auto f = boost::bind(&Miner::ConsiderChain, i.first, boost::ref(s), best_chain);
+            auto f = boost::bind(&Miner::ConsiderChain, i.first, boost::ref(s), chain);
             s.schedule(f, now + boost::chrono::nanoseconds(i.second));
         }
     }
