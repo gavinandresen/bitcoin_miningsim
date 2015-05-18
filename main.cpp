@@ -42,7 +42,7 @@ public:
         auto now = boost::chrono::system_clock::now();
         for (auto i : peers) {
             auto f = boost::bind(&Miner::ConsiderChain, i.first, boost::ref(s), best_chain);
-            s.schedule(f, now + boost::chrono::microseconds(i.second));
+            s.schedule(f, now + boost::chrono::nanoseconds(i.second));
         }
     }
 
@@ -101,20 +101,18 @@ int main(int argc, char** argv)
     boost::random::poisson_distribution<> p_dist(600.0);
 
     CScheduler simulator;
-    boost::thread* sim_thread = new boost::thread(boost::bind(&CScheduler::serviceQueue, &simulator, false));
 
     auto t = boost::chrono::system_clock::now();
     for (int i = 0; i < n_blocks; i++) {
         int which_miner = dist(rng);
         auto f = boost::bind(&Miner::FindBlock, &miner[which_miner], boost::ref(simulator), i);
         auto t_delta = p_dist(rng);
-        auto t_found = t + boost::chrono::microseconds((int)t_delta);
+        auto t_found = t + boost::chrono::nanoseconds((int)t_delta);
         simulator.schedule(f, t_found);
         t = t_found;
     }
 
-    simulator.stop(true); // Drain the simulation
-    sim_thread->join();
+    simulator.serviceQueue(true);
 
     for (int i = 0; i < 7; i++) {
         std::cout << "Miner " << i << " tip: " << miner[i].GetChainTip() << "\n";
