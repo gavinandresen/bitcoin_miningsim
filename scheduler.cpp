@@ -26,7 +26,7 @@ void CScheduler::serviceQueue()
     }
 }
 
-void CScheduler::schedule(CScheduler::Function f, boost::chrono::system_clock::time_point t)
+void CScheduler::schedule(CScheduler::Function f, double t)
 {
     taskQueue.insert(std::make_pair(t, f));
 }
