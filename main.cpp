@@ -1,77 +1,46 @@
 #include "scheduler.h"
 
 #include <assert.h>
+#include <boost/algorithm/string.hpp>
 #include <boost/bind.hpp>
 #include <boost/function.hpp>
 #include <boost/random/discrete_distribution.hpp>
 #include <boost/random/exponential_distribution.hpp>
 #include <boost/random/mersenne_twister.hpp>
+#include <boost/random/random_number_generator.hpp>
 #include <boost/random/uniform_int_distribution.hpp>
+#include <boost/random/uniform_real_distribution.hpp>
 #include <boost/random/variate_generator.hpp>
+#include <boost/program_options.hpp>
 #include <boost/thread.hpp>
 #include <cstdlib>
 #include <cmath>
+#include <fstream>
 #include <iostream>
 #include <memory>
+#include <string>
+#include <vector>
 
-// Simulated miner, assuming constant difficulty.
-class Miner
-{
-public:
-    Miner(double _hash_fraction) : hash_fraction(_hash_fraction) {
-        best_chain = std::make_shared<std::vector<int>>();
-    }
-    
-    void AddPeer(Miner* peer, int64_t latency) {
-        peers.push_back(std::make_pair(peer, latency));
-    }
+#include "standard_miner.hpp"
 
-    virtual void FindBlock(CScheduler& s, int blockNumber, double t) {
-        // Extend the chain:
-        auto chain_copy = std::make_shared<std::vector<int>>(best_chain->begin(), best_chain->end());
-        chain_copy->push_back(blockNumber);
-        best_chain = chain_copy;
-        
-        RelayChain(s, chain_copy, t);
-    }
-
-    virtual void ConsiderChain(CScheduler& s, std::shared_ptr<std::vector<int>> chain, double t) {
-        if (chain->size() > best_chain->size()) {
-            best_chain = chain;
-            RelayChain(s, chain, t);
-        }
-    }
-
-    virtual void RelayChain(CScheduler& s, std::shared_ptr<std::vector<int>> chain, double t) {
-        for (auto i : peers) {
-            auto f = boost::bind(&Miner::ConsiderChain, i.first, boost::ref(s), chain, t);
-            s.schedule(f, t + i.second);
-        }
-    }
-
-    virtual void ResetChain() {
-        best_chain->clear();
-    }
-
-    const double GetHashFraction() const { return hash_fraction; }
-    std::vector<int> GetBestChain() const { return *best_chain; }
-
-protected:
-    double hash_fraction;
-
-    std::shared_ptr<std::vector<int>> best_chain;
-    std::list<std::pair<Miner*,double>> peers;
-};
 
 static void
-Connect(Miner* m1, Miner* m2, int64_t latency)
+Connect(Miner* m1, Miner* m2, double latency)
 {
     m1->AddPeer(m2, latency);
     m2->AddPeer(m1, latency);
 }
 
+double
+random_real(boost::random::mt19937& rng, double min, double max)
+{
+    boost::random::uniform_real_distribution<> d(min,max);
+    return d(rng);
+}
+
 int
-run_simulation(boost::random::mt19937& rng, int n_blocks, std::vector<Miner*>& miners, std::vector<int>& blocks_found)
+run_simulation(boost::random::mt19937& rng, int n_blocks, double block_latency, 
+               std::vector<Miner*>& miners, std::vector<int>& blocks_found)
 {
     CScheduler simulator;
 
@@ -92,7 +61,7 @@ run_simulation(boost::random::mt19937& rng, int n_blocks, std::vector<Miner*>& m
         block_owners.insert(std::make_pair(i, which_miner));
         auto t_delta = block_time_gen()*600.0;
         auto t_found = t + t_delta;
-        auto f = boost::bind(&Miner::FindBlock, miners[which_miner], boost::ref(simulator), i, t_found);
+        auto f = boost::bind(&Miner::FindBlock, miners[which_miner], boost::ref(simulator), i, t_found, block_latency);
         simulator.schedule(f, t_found);
         t = t_found;
     }
@@ -115,62 +84,98 @@ run_simulation(boost::random::mt19937& rng, int n_blocks, std::vector<Miner*>& m
 
 int main(int argc, char** argv)
 {
+    namespace po = boost::program_options;
+
     int n_blocks = 2016;
     double block_latency = 1.0;
     int n_runs = 1;
     int rng_seed = 0;
+    std::string config_file;
 
-    if (argc > 1) {
-        n_blocks = atoi(argv[1]);
-    }
-    if (argc > 2) {
-        block_latency = atof(argv[2]);
-    }
-    if (argc > 3) {
-        n_runs = atoi(argv[3]);
-    }
-    if (argc > 4) {
-        rng_seed = atoi(argv[4]);
-    }
+    po::options_description desc("Command-line options");
+    desc.add_options()
+        ("help", "show options")
+        ("blocks", po::value<int>(&n_blocks)->default_value(2016), "number of blocks to simulate")
+        ("latency", po::value<double>(&block_latency)->default_value(1.0), "block relay/validate latency (in seconds) to simulate")
+        ("runs", po::value<int>(&n_runs)->default_value(1), "number of times to run simulation")
+        ("rng_seed", po::value<int>(&rng_seed)->default_value(0), "random number generator seed")
+        ("config", po::value<std::string>(&config_file)->default_value("mining.cfg"), "Mining config filename")
+        ;
+    po::variables_map vm;
 
-    std::cout << "Simulating " << n_blocks << " blocks, latency " << block_latency << "secs, rng seed: " << rng_seed << "\n";
+    po::options_description config("Mining config file options");
+    config.add_options()
+        ("miner", po::value<std::vector<std::string>>()->composing(), "hashrate type")
+        ("biconnect", po::value<std::vector<std::string>>()->composing(), "m n connection_latency")
+        ;
 
-    // TODO: read miner config (hash rate, connectivity, connection latency...) from a config file...
-    // Create 8 miners
-    std::vector<Miner*> miners;
-    miners.push_back(new Miner(0.3));
-    for (int i = 1; i < 8; i++) miners.push_back(new Miner(0.1));
+    po::store(po::parse_command_line(argc, argv, desc), vm);
+    po::notify(vm);
+    std::ifstream f(config_file.c_str());
+    po::store(po::parse_config_file<char>(f, config), vm);
+    f.close();
+    po::notify(vm);
 
-    // miners 1-7 connected to each other, directly
-    for (int i = 1; i < 8; i++) {
-        for (int j = i+1; j < 8; j++) {
-            Connect(miners[i], miners[j], block_latency);
-        }
+    if (vm.count("help")) {
+        std::cout << desc << "\n";
+        std::cout << config << "\n";
+        return 1;
     }
-
-    // miners[0] sends to, and receives from, miner1/2/3
-    miners[0]->AddPeer(miners[1], block_latency);
-    miners[1]->AddPeer(miners[0], block_latency);
-    miners[0]->AddPeer(miners[2], block_latency);
-    miners[2]->AddPeer(miners[0], block_latency);
-    miners[0]->AddPeer(miners[3], block_latency);
-    miners[3]->AddPeer(miners[0], block_latency);
-    // ... but miner[0] receives from all peers:
-    for (int i = 4; i < 8; i++)
-        miners[i]->AddPeer(miners[0], block_latency);
 
     boost::random::mt19937 rng;
     rng.seed(rng_seed);
 
+    std::vector<Miner*> miners;
+    if (!vm.count("miner")) {
+        std::cout << "You must configure one or more miner in " << config_file << "\n";
+        return 1;
+    }
+    for (auto m : vm["miner"].as<std::vector<std::string>>()) {
+        std::vector<std::string> v;
+        boost::split(v, m, boost::is_any_of(" \t,"));
+        if (v.size() < 2) {
+            std::cout << "Couldn't parse miner description: " << m << "\n";
+            continue;
+        }
+        double hashpower = atof(v[0].c_str());
+        if (v[1] == "standard") {
+            miners.push_back(new Miner(hashpower, boost::bind(random_real, boost::ref(rng), _1, _2)));
+        }
+        else {
+            std::cout << "Couldn't parse miner description: " << m << "\n";
+            continue;
+        }
+    }
+    std::vector<std::string> c = vm["biconnect"].as<std::vector<std::string>>();
+    for (auto m : c) {
+        std::vector<std::string> v;
+        boost::split(v, m, boost::is_any_of(" \t,"));
+        if (v.size() < 3) {
+            std::cout << "Couldn't parse biconnect description: " << m << "\n";
+            continue;
+        }
+        int m1 = atoi(v[0].c_str());
+        int m2 = atoi(v[1].c_str());
+        double latency = atof(v[2].c_str());
+        if (m1 >= miners.size() || m2 >= miners.size()) {
+            std::cout << "Couldn't parse biconnect description: " << m << "\n";
+            continue;
+        }
+        Connect(miners[m1], miners[m2], latency);
+    }
+
+    std::cout << "Simulating " << n_blocks << " blocks, latency " << block_latency << "secs\n";
+    std::cout << "  with " << miners.size() << " miners over " << n_runs << " runs\n";
+
     int best_chain_sum = 0;
     double fraction_orphan_sum = 0.0;
     std::vector<int> blocks_found_sum;
-    blocks_found_sum.reserve(miners.size());
+    blocks_found_sum.assign(miners.size(), 0);
     for (int run = 0; run < n_runs; run++) {
         for (auto miner : miners) miner->ResetChain();
 
         std::vector<int> blocks_found;
-        int best_chain_length = run_simulation(rng, n_blocks, miners, blocks_found);
+        int best_chain_length = run_simulation(rng, n_blocks, block_latency, miners, blocks_found);
         best_chain_sum += best_chain_length;
         fraction_orphan_sum += 1.0 - (double)best_chain_length/(double)n_blocks;;
         for (int i = 0; i < blocks_found.size(); i++) blocks_found_sum[i] += blocks_found[i];
@@ -178,7 +183,12 @@ int main(int argc, char** argv)
 
     std::cout.precision(4);
     std::cout << "Orphan rate: " << (fraction_orphan_sum*100.0)/n_runs << "%\n";
-    std::cout << "Miner shares (%):";
+    std::cout << "Miner hashrate shares (%):";
+    for (int i = 0; i < miners.size(); i++) {
+        std::cout << " " << miners[i]->GetHashFraction()*100;
+    }
+    std::cout << "\n";
+    std::cout << "Miner block shares (%):";
 
     for (int i = 0; i < miners.size(); i++) {
         double average_blocks_found = (double)blocks_found_sum[i]/n_runs;
