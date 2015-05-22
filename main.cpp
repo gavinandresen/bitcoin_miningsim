@@ -39,7 +39,7 @@ random_real(boost::random::mt19937& rng, double min, double max)
 }
 
 int
-run_simulation(boost::random::mt19937& rng, int n_blocks, double block_latency, 
+run_simulation(boost::random::mt19937& rng, int n_blocks,
                std::vector<Miner*>& miners, std::vector<int>& blocks_found)
 {
     CScheduler simulator;
@@ -61,7 +61,7 @@ run_simulation(boost::random::mt19937& rng, int n_blocks, double block_latency,
         block_owners.insert(std::make_pair(i, which_miner));
         auto t_delta = block_time_gen()*600.0;
         auto t_found = t + t_delta;
-        auto f = boost::bind(&Miner::FindBlock, miners[which_miner], boost::ref(simulator), i, t_found, block_latency);
+        auto f = boost::bind(&Miner::FindBlock, miners[which_miner], boost::ref(simulator), i, t_found);
         simulator.schedule(f, t_found);
         t = t_found;
     }
@@ -139,8 +139,12 @@ int main(int argc, char** argv)
             continue;
         }
         double hashpower = atof(v[0].c_str());
+        double latency = block_latency;
+        if (v.size() > 2) {
+            latency = atof(v[2].c_str());
+        }
         if (v[1] == "standard") {
-            miners.push_back(new Miner(hashpower, boost::bind(random_real, boost::ref(rng), _1, _2)));
+            miners.push_back(new Miner(hashpower, latency, boost::bind(random_real, boost::ref(rng), _1, _2)));
         }
         else {
             std::cout << "Couldn't parse miner description: " << m << "\n";
@@ -165,8 +169,8 @@ int main(int argc, char** argv)
         Connect(miners[m1], miners[m2], latency);
     }
 
-    std::cout << "Simulating " << n_blocks << " blocks, latency " << block_latency << "secs\n";
-    std::cout << "  with " << miners.size() << " miners over " << n_runs << " runs\n";
+    std::cout << "Simulating " << n_blocks << " blocks, default latency " << block_latency << "secs, ";
+    std::cout << "with " << miners.size() << " miners over " << n_runs << " runs\n";
     if (vm.count("description")) {
         std::cout << "Configuration: " << vm["description"].as<std::string>() << "\n";
     }
@@ -179,7 +183,7 @@ int main(int argc, char** argv)
         for (auto miner : miners) miner->ResetChain();
 
         std::vector<int> blocks_found;
-        int best_chain_length = run_simulation(rng, n_blocks, block_latency, miners, blocks_found);
+        int best_chain_length = run_simulation(rng, n_blocks, miners, blocks_found);
         best_chain_sum += best_chain_length;
         fraction_orphan_sum += 1.0 - (double)best_chain_length/(double)n_blocks;;
         for (int i = 0; i < blocks_found.size(); i++) blocks_found_sum[i] += blocks_found[i];
