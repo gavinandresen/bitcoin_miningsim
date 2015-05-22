@@ -107,6 +107,7 @@ int main(int argc, char** argv)
     config.add_options()
         ("miner", po::value<std::vector<std::string>>()->composing(), "hashrate type")
         ("biconnect", po::value<std::vector<std::string>>()->composing(), "m n connection_latency")
+        ("description", po::value<std::string>(), "Configuration description")
         ;
 
     po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -166,6 +167,9 @@ int main(int argc, char** argv)
 
     std::cout << "Simulating " << n_blocks << " blocks, latency " << block_latency << "secs\n";
     std::cout << "  with " << miners.size() << " miners over " << n_runs << " runs\n";
+    if (vm.count("description")) {
+        std::cout << "Configuration: " << vm["description"].as<std::string>() << "\n";
+    }
 
     int best_chain_sum = 0;
     double fraction_orphan_sum = 0.0;
