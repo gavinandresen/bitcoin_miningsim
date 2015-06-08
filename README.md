@@ -32,28 +32,25 @@ boost (but you do need a c++11-capable C++ compiler).
 Example runs:
 
 ```
-$ mining_simulator
-Simulating 2016 blocks, latency 1secs
-  with 10 miners over 1 runs
-  Configuration: Ten equal miners, connected in a ring
-  Orphan rate: 0.1984%
-  Miner hashrate shares (%): 10 10 10 10 10 10 10 10 10 10
-  Miner block shares (%): 9.692 11.08 9.791 10.04 9.543 9.195 9.543 9.841 9.94 11.33
+$ ./mining_simulator
+Simulating 2016 blocks, default latency 1secs, with 10 miners over 1 runs
+Configuration: Ten equal miners, connected in a ring
+Orphan rate: 0.1984%
+Miner hashrate shares (%): 10 10 10 10 10 10 10 10 10 10
+Miner block shares (%): 10.49 9.891 9.692 10.49 8.052 9.891 10.54 9.99 9.245 11.73
 
 $ mining_simulator --latency 20
-Simulating 2016 blocks, latency 20secs
-  with 10 miners over 1 runs
-  Configuration: Ten equal miners, connected in a ring
-  Orphan rate: 3.224%
-  Miner hashrate shares (%): 10 10 10 10 10 10 10 10 10 10
-  Miner block shares (%): 9.585 11.28 9.79 9.995 9.534 8.97 9.687 9.841 9.995 11.33
+Simulating 2016 blocks, default latency 20secs, with 10 miners over 1 runs
+Configuration: Ten equal miners, connected in a ring
+Orphan rate: 3.075%
+Miner hashrate shares (%): 10 10 10 10 10 10 10 10 10 10
+Miner block shares (%): 10.39 9.98 9.724 10.44 8.035 9.826 10.7 9.928 9.314 11.67
 
 $ mining_simulator --latency 20 --config mining_30.cfg --runs 100
-Simulating 2016 blocks, latency 20secs
-  with 8 miners over 100 runs
-  Configuration: 30% miner, with 7 10% miners, selected connectivity
-  Orphan rate: 2.694%
-  Miner hashrate shares (%): 30 10 10 10 10 10 10 10
-  Miner block shares (%): 30.32 9.859 10.04 10.03 9.977 9.942 9.883 9.947
+Simulating 2016 blocks, default latency 20secs, with 8 miners over 100 runs
+Configuration: 30% miner, with 7 10% miners, selected connectivity
+Orphan rate: 2.715%
+Miner hashrate shares (%): 30 10 10 10 10 10 10 10
+Miner block shares (%): 30.25 9.922 10.05 9.959 9.918 9.929 9.932 10.05
 ```
 
