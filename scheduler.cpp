@@ -8,7 +8,7 @@
 #include <boost/bind.hpp>
 #include <utility>
 
-CScheduler::CScheduler()
+CScheduler::CScheduler() : simTime(0.0)
 {
 }
 
@@ -20,6 +20,7 @@ CScheduler::~CScheduler()
 void CScheduler::serviceQueue()
 {
     while (!taskQueue.empty()) {
+        simTime = taskQueue.begin()->first;
         Function f = taskQueue.begin()->second;
         taskQueue.erase(taskQueue.begin());
         f();

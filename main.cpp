@@ -180,6 +180,9 @@ int main(int argc, char** argv)
     std::vector<int> blocks_found_sum;
     blocks_found_sum.assign(miners.size(), 0);
     for (int run = 0; run < n_runs; run++) {
+#ifdef TRACE
+        std::cout << "Run " << run << "\n";
+#endif
         for (auto miner : miners) miner->ResetChain();
 
         std::vector<int> blocks_found;

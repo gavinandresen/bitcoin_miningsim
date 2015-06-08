@@ -40,10 +40,16 @@ public:
         chain_copy->push_back(blockNumber);
         best_chain = chain_copy;
         
+#ifdef TRACE
+        std::cout << "Miner " << hash_fraction << " found block at simulation time " << s.getSimTime() << "\n";
+#endif
         RelayChain(this, s, chain_copy, t+block_latency);
     }
 
     virtual void ConsiderChain(Miner* from, CScheduler& s, std::shared_ptr<std::vector<int>> chain, double t) {
+#ifdef TRACE
+        std::cout << "Miner " << hash_fraction << " considering chain at simulation time " << s.getSimTime() << "\n";
+#endif
         if (chain->size() > best_chain->size()) {
             best_chain = chain;
             RelayChain(from, s, chain, t);
@@ -56,10 +62,11 @@ public:
             peer.chain_tip = chain->back();
             if (peer.peer == from) continue; // don't relay to peer that just sent it!
 
-            auto f = boost::bind(&Miner::ConsiderChain, peer.peer, from, boost::ref(s), chain, t);
             double jitter = 0;
             if (peer.latency > 0) jitter = jitter_func(-peer.latency/1000., peer.latency/1000.);
-            s.schedule(f, t + peer.latency + jitter);
+            double tPeer = t + peer.latency + jitter;
+            auto f = boost::bind(&Miner::ConsiderChain, peer.peer, from, boost::ref(s), chain, tPeer);
+            s.schedule(f, tPeer);
         }
     }
 

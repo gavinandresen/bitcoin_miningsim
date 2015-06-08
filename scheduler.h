@@ -26,8 +26,11 @@ public:
 
     void serviceQueue();
 
+    double getSimTime() { return simTime; }
+
 private:
     std::multimap<double, Function> taskQueue;
+    double simTime;
 };
 
 #endif
