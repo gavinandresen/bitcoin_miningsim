@@ -34,7 +34,7 @@ public:
         peers.push_back(PeerInfo(peer, -1, latency));
     }
 
-    virtual void FindBlock(CScheduler& s, int blockNumber, double t) {
+    virtual void FindBlock(CScheduler& s, int blockNumber) {
         // Extend the chain:
         auto chain_copy = std::make_shared<std::vector<int>>(best_chain->begin(), best_chain->end());
         chain_copy->push_back(blockNumber);
@@ -43,20 +43,22 @@ public:
 #ifdef TRACE
         std::cout << "Miner " << hash_fraction << " found block at simulation time " << s.getSimTime() << "\n";
 #endif
-        RelayChain(this, s, chain_copy, t+block_latency);
+        RelayChain(this, s, chain_copy, block_latency);
     }
 
-    virtual void ConsiderChain(Miner* from, CScheduler& s, std::shared_ptr<std::vector<int>> chain, double t) {
-#ifdef TRACE
-        std::cout << "Miner " << hash_fraction << " considering chain at simulation time " << s.getSimTime() << "\n";
-#endif
+    virtual void ConsiderChain(Miner* from, CScheduler& s,
+                               std::shared_ptr<std::vector<int>> chain, double latency) {
         if (chain->size() > best_chain->size()) {
+#ifdef TRACE
+            std::cout << "Miner " << hash_fraction << " relaying chain at simulation time " << s.getSimTime() << "\n";
+#endif
             best_chain = chain;
-            RelayChain(from, s, chain, t);
+            RelayChain(from, s, chain, latency);
         }
     }
 
-    virtual void RelayChain(Miner* from, CScheduler& s, std::shared_ptr<std::vector<int>> chain, double t) {
+    virtual void RelayChain(Miner* from, CScheduler& s, std::shared_ptr<std::vector<int>> chain,
+                            double latency) {
         for (auto&& peer : peers) {
             if (peer.chain_tip == chain->back()) continue; // Already relayed to this peer
             peer.chain_tip = chain->back();
@@ -64,8 +66,8 @@ public:
 
             double jitter = 0;
             if (peer.latency > 0) jitter = jitter_func(-peer.latency/1000., peer.latency/1000.);
-            double tPeer = t + peer.latency + jitter;
-            auto f = boost::bind(&Miner::ConsiderChain, peer.peer, from, boost::ref(s), chain, tPeer);
+            double tPeer = s.getSimTime() + peer.latency + jitter + latency;
+            auto f = boost::bind(&Miner::ConsiderChain, peer.peer, from, boost::ref(s), chain, block_latency);
             s.schedule(f, tPeer);
         }
     }

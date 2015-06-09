@@ -61,7 +61,7 @@ run_simulation(boost::random::mt19937& rng, int n_blocks,
         block_owners.insert(std::make_pair(i, which_miner));
         auto t_delta = block_time_gen()*600.0;
         auto t_found = t + t_delta;
-        auto f = boost::bind(&Miner::FindBlock, miners[which_miner], boost::ref(simulator), i, t_found);
+        auto f = boost::bind(&Miner::FindBlock, miners[which_miner], boost::ref(simulator), i);
         simulator.schedule(f, t_found);
         t = t_found;
     }
