@@ -3,4 +3,4 @@ CFLAGS=-O2
 #CFLAGS=-g -ggdb -DTRACE
 
 scheduler: main.cpp scheduler.cpp
-	clang++ -std=c++11 -I/usr/local/include -L/usr/local/lib $(CFLAGS) -o mining_simulator main.cpp scheduler.cpp $(BOOST_LIBS)
+	c++ -std=c++11 -I/usr/local/include -L/usr/local/lib $(CFLAGS) -o mining_simulator main.cpp scheduler.cpp $(BOOST_LIBS)
